@@ -1,0 +1,3 @@
+#!/bin/env sh
+
+spacetime generate --lang rust --out-dir src/module_bindings/autogen --project-path ../server

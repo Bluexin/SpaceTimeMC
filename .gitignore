@@ -1,2 +1,5 @@
 **/target/
 .idea/
+/proxy/run/*
+!proxy/run/.keepdir
+/proxy/src/module_bindings/autogen/

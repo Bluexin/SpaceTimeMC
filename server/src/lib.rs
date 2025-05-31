@@ -1,8 +1,13 @@
-use spacetimedb::{reducer, ReducerContext};
+mod player;
+mod server;
+mod types_support;
+
+use spacetimedb::{ReducerContext, reducer};
 
 #[reducer(init)]
 pub fn init(ctx: &ReducerContext) {
     log::info!("Initialized : {}", ctx.sender);
+    server::init(ctx);
 }
 
 #[reducer(client_connected)]

@@ -1,11 +1,12 @@
 [package]
 name = "spacetimemc-server"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
-spacetimedb = "1.1.2"
-log = "0.4"
+spacetimedb = "1.1"
+log.workspace = true
+uuid = { version = "1.17", features = [] }
