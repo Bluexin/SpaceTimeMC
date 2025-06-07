@@ -3221,10 +3221,12 @@ dependencies = [
 name = "spacetimemc-proxy"
 version = "0.1.0"
 dependencies = [
+ "aes",
  "async-trait",
  "base64 0.22.1",
  "bitflags 2.9.1",
  "bytes",
+ "cfb8",
  "chrono",
  "crossbeam",
  "env_logger",
@@ -3235,6 +3237,7 @@ dependencies = [
  "libloading",
  "log",
  "num-bigint",
+ "pin-project-lite",
  "png",
  "pumpkin",
  "pumpkin-config",
@@ -3259,6 +3262,7 @@ dependencies = [
  "sha2",
  "simplelog",
  "spacetimedb-sdk",
+ "spacetimemc-proxy-macros",
  "tauri-winres",
  "thiserror 2.0.12",
  "time",
@@ -3266,6 +3270,14 @@ dependencies = [
  "tokio-stream",
  "tokio-util",
  "uuid",
+]
+
+[[package]]
+name = "spacetimemc-proxy-macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "syn 2.0.101",
 ]
 
 [[package]]

@@ -53,6 +53,10 @@ reqwest = { version = "0.12", default-features = false, features = [
     "rustls-tls",
 ] }
 
+# encryption
+aes = "0.8"
+cfb8 = "0.8"
+
 sha1 = "0.10"
 
 # velocity en
@@ -81,7 +85,9 @@ rustc-hash = "2.1.1"
 tokio-util = { version = "0.7.15", features = ["rt", "codec", "net"] }
 tokio-stream = "0.1.17"
 env_logger = "0.11.8"
+pin-project-lite = "0.2"
 
+spacetimemc-proxy-macros.path = "../macros"
 
 [dependencies.pumpkin]
 git = "https://github.com/Pumpkin-MC/Pumpkin"

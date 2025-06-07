@@ -1,7 +1,8 @@
 [workspace]
 members = [
     "server",
-    "proxy"
+    "proxy",
+    "macros"
 ]
 
 resolver = "3"

@@ -1,7 +1,6 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use ferrumc_net_codec::net_types::NetTypesError;
 use ferrumc_net_codec::net_types::var_int::VarInt;
-use log::logger;
+use ferrumc_net_codec::net_types::NetTypesError;
 use pumpkin_protocol::ser::WritingError;
 use pumpkin_protocol::{ClientPacket, RawPacket};
 use std::io::Cursor;
@@ -9,6 +8,7 @@ use tokio_util::codec::{Decoder, Encoder};
 
 // TODO : output straight up deserialized packets ?
 // But if the connection is not in the right state, we should not attempt to deser an invalid (id-wise) packet
+// Could mutate the codec : HandshakeCodec, StatusCodec, ...
 pub struct MCCodec {
     state: DecodeState,
 }
@@ -16,6 +16,12 @@ pub struct MCCodec {
 enum DecodeState {
     Len,
     Data(usize),
+}
+
+impl Default for MCCodec {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MCCodec {
@@ -26,11 +32,11 @@ impl MCCodec {
     }
 
     pub fn set_compression(&mut self, compression: u8) {
-        todo!("Not yet implemented")
+        todo!("Not yet implemented {compression}")
     }
 
     fn decode_head(&self, src: &mut BytesMut) -> Result<Option<usize>, NetTypesError> {
-        if src.len() < 1 {
+        if src.is_empty() {
             // No need to even try in this case
             return Ok(None);
         }
@@ -59,7 +65,7 @@ impl MCCodec {
         src: &mut BytesMut,
     ) -> Result<Option<RawPacket>, NetTypesError> {
         if src.len() < n {
-            log::info!("Not enough data to decode packet ({} < {})", src.len(), n);
+            log::info!("Not enough data to decode packet ({} < {n})", src.len());
             Ok(None)
         } else {
             // let mut current_packet = src.split_to(n);
@@ -81,7 +87,7 @@ impl Decoder for MCCodec {
         let n = match self.state {
             DecodeState::Len => match self.decode_head(src)? {
                 Some(n) => {
-                    log::trace!("Decoded packet length : {}", n);
+                    log::trace!("Decoded packet length : {n}");
                     self.state = DecodeState::Data(n);
                     n
                 }
@@ -105,7 +111,7 @@ impl Decoder for MCCodec {
                 Ok(Some(data))
             }
             Err(e) => {
-                log::error!("Error decoding packet : {:?}", e);
+                log::error!("Error decoding packet : {e:?}");
                 Err(e)
             }
         }

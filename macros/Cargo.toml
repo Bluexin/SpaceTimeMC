@@ -1,0 +1,10 @@
+[package]
+name = "spacetimemc-proxy-macros"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+proc-macro = true
+[dependencies]
+proc-macro2 = "1.0.95"
+syn = "2.0.101"

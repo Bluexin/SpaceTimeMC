@@ -1,8 +1,7 @@
 use log::error;
-use pumpkin::{PumpkinServer, init_log, stop_server};
 use pumpkin_data::packet::CURRENT_MC_PROTOCOL;
-use pumpkin_util::text::TextComponent;
 use pumpkin_util::text::color::NamedColor;
+use pumpkin_util::text::TextComponent;
 use spacetimedb_sdk::{
     DbConnectionBuilder, DbContext, Error, Identity, SubscriptionHandle, Table, TableWithPrimaryKey,
 };
@@ -11,15 +10,15 @@ use spacetimemc_proxy::module_bindings::{
     BasicConfiguration, DbConnection, ErrorContext, ServerBasicConfigTableAccess,
     SubscriptionEventContext,
 };
-use spacetimemc_proxy::server_actor::CURRENT_MC_VERSION;
 use spacetimemc_proxy::server_actor::actor::{Server, ServerMessage};
+use spacetimemc_proxy::server_actor::CURRENT_MC_VERSION;
 use std::io;
 use std::sync::mpsc::channel;
 use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 use std::time::Instant;
 use tokio::io::AsyncWriteExt;
-use tokio::signal::unix::{SignalKind, signal};
+use tokio::signal::unix::{signal, SignalKind};
 use tokio::sync::oneshot;
 use tokio::task::yield_now;
 use tokio::time::sleep;
@@ -130,16 +129,6 @@ fn on_sub_error(_ctx: &ErrorContext, err: Error) {
     log::error!("Subscription failed: {}", err);
     // FIXME : use proper shutdown
     // std::process::exit(1);
-}
-
-fn handle_interrupt() {
-    log::warn!(
-        "{}",
-        TextComponent::text("Received interrupt signal; stopping server...")
-            .color_named(NamedColor::Red)
-            .to_pretty_console()
-    );
-    stop_server();
 }
 
 /// The URI of the SpacetimeDB instance hosting our chat database and module.

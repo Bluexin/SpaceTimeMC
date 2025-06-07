@@ -1,6 +1,4 @@
-use spacetimedb::SpacetimeType;
 use spacetimedb::sats::meta_type::MetaType;
-use spacetimedb::sats::typespace::TypespaceBuilder;
 use spacetimedb::sats::{AlgebraicType, impl_deserialize, impl_serialize, impl_st};
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
