@@ -1,9 +1,9 @@
+use crate::actor_ref::ActorRef;
 use crate::client_actor::net::MCCodec;
 use crate::client_actor::stream_actor::StreamActor;
-use crate::protocol::status_request::SStatusRequest;
 use crate::server_actor::actor::{Server, ServerMessage};
 use pumpkin_protocol::client::status::{CPingResponse, CStatusResponse};
-use pumpkin_protocol::server::status::SStatusPingRequest;
+use pumpkin_protocol::server::status::{SStatusPingRequest, SStatusRequest};
 use std::fmt::{Debug, Formatter};
 use std::net::SocketAddr;
 use tokio::net::TcpStream;
@@ -21,20 +21,19 @@ impl StatusHandler {
         tracker: &TaskTracker,
         server: Server,
     ) {
-        let (status_sender, status_receiver) = oneshot::channel();
-        server
-            .send(ServerMessage::GetStatus {
-                reply_to: status_sender,
-            })
-            .await;
-
-        let ping_actor = StatusActor {
-            id,
-            client_address,
-            framer,
-            status: Some(status_receiver),
-        };
-        tracker.spawn(ping_actor.run());
+        if let Ok(status_receiver) = server.ask(ServerMessage::GetStatus).await {
+            let ping_actor = StatusActor {
+                id,
+                client_address,
+                framer,
+                status: Some(status_receiver),
+            };
+            tracker.spawn(ping_actor.run());
+        } else {
+            log::info!(
+                "Server is not responsive, not spawning StatusActor {id} for {client_address:?}"
+            );
+        }
     }
 }
 
@@ -42,7 +41,7 @@ impl Debug for StatusActor {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("StatusActor")
             .field("id", &self.id)
-            .field("client_address", &self.client_address)
+            // .field("client_address", &self.client_address)
             .finish()
     }
 }

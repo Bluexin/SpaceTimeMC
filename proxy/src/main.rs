@@ -5,6 +5,7 @@ use pumpkin_util::text::TextComponent;
 use spacetimedb_sdk::{
     DbConnectionBuilder, DbContext, Error, Identity, SubscriptionHandle, Table, TableWithPrimaryKey,
 };
+use spacetimemc_proxy::actor_ref::ActorRef;
 use spacetimemc_proxy::module_bindings;
 use spacetimemc_proxy::module_bindings::{
     BasicConfiguration, DbConnection, ErrorContext, ServerBasicConfigTableAccess,

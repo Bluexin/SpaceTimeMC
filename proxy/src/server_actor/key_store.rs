@@ -1,15 +1,20 @@
 use num_bigint::BigInt;
-use pumpkin_protocol::client::login::CEncryptionRequest;
 use rand::rngs::OsRng;
-use rsa::{Pkcs1v15Encrypt, RsaPrivateKey, traits::PublicKeyParts as _};
+use rsa::{traits::PublicKeyParts as _, Pkcs1v15Encrypt, RsaPrivateKey};
 use sha1::Sha1;
 use sha2::Digest;
 
 use pumpkin::net::EncryptionError;
 
 pub struct KeyStore {
-    pub private_key: RsaPrivateKey,
-    pub public_key_der: Box<[u8]>,
+    private_key: RsaPrivateKey,
+    public_key_der: Box<[u8]>,
+}
+
+impl Default for KeyStore {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl KeyStore {
@@ -37,7 +42,7 @@ impl KeyStore {
         RsaPrivateKey::new(&mut rng, 1024).expect("Failed to generate a key")
     }
 
-    pub fn encryption_request<'a>(
+    /*pub fn encryption_request<'a>(
         &'a self,
         server_id: &'a str,
         verification_token: &'a [u8; 4],
@@ -49,14 +54,16 @@ impl KeyStore {
             verification_token,
             should_authenticate,
         )
+    }*/
+
+    pub fn get_public_der(&self) -> &[u8] {
+        &self.public_key_der
     }
 
     pub fn decrypt(&self, data: &[u8]) -> Result<Vec<u8>, EncryptionError> {
-        let decrypted = self
-            .private_key
+        self.private_key
             .decrypt(Pkcs1v15Encrypt, data)
-            .map_err(|_| EncryptionError::FailedDecrypt)?;
-        Ok(decrypted)
+            .map_err(|_| EncryptionError::FailedDecrypt)
     }
 
     pub fn get_digest(&self, secret: &[u8]) -> String {

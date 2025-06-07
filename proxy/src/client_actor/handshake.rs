@@ -54,7 +54,7 @@ impl Debug for HandshakeActor {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("HandshakeActor")
             .field("id", &self.id)
-            .field("client_address", &self.client_address)
+            // .field("client_address", &self.client_address)
             .finish()
     }
 }
@@ -67,7 +67,8 @@ impl StreamActor<Framed<TcpStream, MCCodec>> for HandshakeActor {
 
 impl HandshakeActor {
     async fn run(mut self) {
-        log::debug!("{self:?} initialized");
+        // TODO : maybe not have client ip in the logs at all ?
+        log::debug!("{self:?} initialized for {}", self.client_address);
 
         let next_state = self
             .read::<SHandShake>()
@@ -146,7 +147,7 @@ impl HandshakeActor {
             self.id,
             self.client_address,
             self.framer,
-            &self.tracker,
+            self.tracker,
             self.server,
         )
         .await

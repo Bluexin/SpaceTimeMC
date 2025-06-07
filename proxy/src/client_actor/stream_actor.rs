@@ -75,16 +75,16 @@ where
     }
 
     fn read<P: Packet + ServerPacket>(&mut self) -> impl Future<Output = Option<P>> {
-        self.read_custom(P::read)
+        self.read_custom::<_, P, P>(P::read)
     }
 
-    fn read_empty<P: Packet + Default>(&mut self) -> impl Future<Output = Option<P>> {
-        self.read_custom(|_| Ok(P::default()))
+    fn read_empty<P: Packet>(&mut self) -> impl Future<Output = Option<()>> {
+        self.read_custom::<_, P, ()>(|_| Ok(()))
     }
 
-    fn read_custom<Read, P: Packet>(&mut self, read: Read) -> impl Future<Output = Option<P>>
+    fn read_custom<Read, P: Packet, Res>(&mut self, read: Read) -> impl Future<Output = Option<Res>>
     where
-        Read: FnOnce(Reader<Bytes>) -> Result<P, ReadingError>,
+        Read: FnOnce(Reader<Bytes>) -> Result<Res, ReadingError>,
     {
         async move {
             if let Some(packet) = self.next_frame_with_timeout().await {
@@ -97,7 +97,11 @@ where
                         }
                     }
                 } else {
-                    log::error!("{self:?} received unexpected packet : {:?}", packet.id);
+                    log::error!(
+                        "{self:?} received unexpected packet : {:?} (expected: {})",
+                        packet.id,
+                        P::PACKET_ID
+                    );
                     None
                 }
             } else {

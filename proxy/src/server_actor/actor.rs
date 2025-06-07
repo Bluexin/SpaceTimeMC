@@ -1,14 +1,18 @@
+use crate::actor_ref::ActorRef;
 use crate::client_actor::handshake::HandshakeHandler;
+use crate::err::{SendError, TrySendError};
 use crate::module_bindings::autogen::BasicConfiguration;
 use crate::server_actor::connection_cache::CachedStatus;
-use pumpkin::net::authentication::{AuthError, fetch_mojang_public_keys};
-use pumpkin_config::{advanced_config, logging};
+use crate::server_actor::key_store::KeyStore;
+use pumpkin::net::authentication::fetch_mojang_public_keys;
+use pumpkin_config::advanced_config;
 use rsa::RsaPublicKey;
+use std::default::Default;
 use std::num::Wrapping;
 use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio::select;
-use tokio::signal::unix::{Signal, SignalKind, signal};
+use tokio::signal::unix::{signal, Signal, SignalKind};
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::task::TaskTracker;
 
@@ -26,20 +30,11 @@ impl Server {
         Self { sender }
     }
 
-    pub async fn send(&self, msg: ServerMessage) {
-        self.sender.send(msg).await.unwrap();
-    }
-
-    pub fn try_send(
-        &self,
-        msg: ServerMessage,
-    ) -> Result<(), mpsc::error::TrySendError<ServerMessage>> {
-        self.sender.try_send(msg)
-    }
-
     pub async fn start(&self, address: String, death: oneshot::Sender<()>) {
         self.send(ServerMessage::StartListener { address, death })
-            .await;
+            .await
+            // If we already fail to send when starting the server, might as well panic
+            .unwrap();
     }
 
     fn from_address(sender: mpsc::Sender<ServerMessage>) -> Self {
@@ -47,17 +42,31 @@ impl Server {
     }
 }
 
+impl ActorRef<ServerMessage> for Server {
+    async fn send(&self, msg: ServerMessage) -> Result<(), SendError> {
+        self.sender.send(msg).await.map_err(SendError::from)
+    }
+
+    fn try_send(&self, msg: ServerMessage) -> Result<(), TrySendError> {
+        self.sender.try_send(msg).map_err(TrySendError::from)
+    }
+}
+
+#[derive(Debug)]
 pub enum ServerMessage {
     Shutdown,
-    GetStatus {
-        reply_to: oneshot::Sender<String>,
-    },
+    GetStatus(oneshot::Sender<String>),
     StartListener {
         address: String,
         death: oneshot::Sender<()>,
     },
     UpdateConfig {
         config: BasicConfiguration,
+    },
+    CertificatePublicDer(oneshot::Sender<Box<[u8]>>),
+    Decrypt {
+        data: Box<[u8]>,
+        reply_to: oneshot::Sender<Vec<u8>>,
     },
 }
 
@@ -71,6 +80,7 @@ struct ServerActor {
     use_whitelist: bool,
     tasks: TaskTracker,
     self_addr: mpsc::Sender<ServerMessage>,
+    key_store: KeyStore,
 }
 
 impl ServerActor {
@@ -94,6 +104,7 @@ impl ServerActor {
             use_whitelist: basic_configuration.white_list,
             tasks: TaskTracker::new(),
             self_addr,
+            key_store: Default::default(),
         }
     }
 
@@ -120,8 +131,7 @@ impl ServerActor {
                 Ok(pub_keys) => Some(pub_keys),
                 Err(err) => {
                     log::error!(
-                        "Failed to fetch mojang public keys: {}, server will not allow chat reports",
-                        err
+                        "Failed to fetch mojang public keys: {err:?}, server will not allow chat reports"
                     );
                     None
                 }
@@ -138,11 +148,13 @@ impl ServerActor {
         }
     }
 
+    // Note on usage of `let _ =` :
+    // In this case don't mind if the connection already died, the server can safely ignore it at
+    // this stage
     async fn handle_message(&mut self, msg: ServerMessage) {
         match msg {
             ServerMessage::Shutdown => self.shutdown().await,
-            ServerMessage::GetStatus { reply_to } => {
-                // We don't mind if the connection already died
+            ServerMessage::GetStatus(reply_to) => {
                 let _ = reply_to.send(self.listing.get_status_string());
             }
             ServerMessage::StartListener { address, death } => {
@@ -150,7 +162,22 @@ impl ServerActor {
             }
             ServerMessage::UpdateConfig { config } => {
                 // TODO : this should update rather than override (to keep player count)
+                // Might not even need to be cached at all
                 self.listing = CachedStatus::from_config(&config);
+            }
+            ServerMessage::CertificatePublicDer(reply_to) => {
+                let _ = reply_to.send(self.key_store.get_public_der().into());
+            }
+            ServerMessage::Decrypt { data, reply_to } => {
+                match self.key_store.decrypt(&data) {
+                    Ok(decrypted) => {
+                        let _ = reply_to.send(decrypted);
+                    }
+                    Err(e) => {
+                        log::error!("Failed to decrypt: {e:?}");
+                        // this drops reply_to, closing it
+                    }
+                }
             }
         }
     }
@@ -173,9 +200,9 @@ impl ServerActor {
 
     async fn start_listener(&self, server_address: String, death: oneshot::Sender<()>) {
         let tasks = TaskTracker::new();
-        tasks.clone().spawn(Self::run_listener(
+        tasks.spawn(Self::run_listener(
             server_address,
-            tasks,
+            tasks.clone(),
             self.self_addr.clone(),
             death,
         ));
@@ -192,35 +219,37 @@ impl ServerActor {
         let listener = TcpListener::bind(server_address)
             .await
             .expect("Failed to start `TcpListener`");
-        while match select! {
-            biased;
-            _ = sigint.recv() => None,
-            _ = sighup.recv() => None,
-            _ = sigterm.recv() => None,
-            open = listener.accept() => Some(open),
-        } {
-            Some(Ok((connection, client_addr))) => {
-                let id = master_client_id.0;
-                master_client_id += 1;
-                log::info!("Accepting connection from: {client_addr} (id {id})");
-                HandshakeHandler::spawn(
-                    connection,
-                    client_addr,
-                    id,
-                    &tasks,
-                    Server::from_address(self_addr.clone()),
-                );
-                true
+
+        loop {
+            match select! {
+                biased;
+                _ = sigint.recv() => None,
+                _ = sighup.recv() => None,
+                _ = sigterm.recv() => None,
+                open = listener.accept() => Some(open),
+            } {
+                Some(Ok((connection, client_addr))) => {
+                    let id = master_client_id.0;
+                    master_client_id += 1;
+                    log::info!("Accepting connection from: {client_addr} (id {id})");
+                    HandshakeHandler::spawn(
+                        connection,
+                        client_addr,
+                        id,
+                        &tasks,
+                        Server::from_address(self_addr.clone()),
+                    );
+                }
+                Some(Err(e)) => {
+                    log::error!("Failed to accept connection: {e}");
+                    break;
+                }
+                None => {
+                    log::info!("Got none (interrupt)");
+                    break;
+                }
             }
-            Some(Err(e)) => {
-                log::error!("Failed to accept connection: {e}");
-                false
-            }
-            None => {
-                log::info!("Got none (interrupt)");
-                false
-            }
-        } {}
+        }
 
         log::info!("Server actor death");
         death.send(()).unwrap()
